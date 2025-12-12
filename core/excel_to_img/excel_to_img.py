@@ -111,7 +111,7 @@ def copy_dir_files(source, target):
             shutil.copy(source_file, target_file)
 
 
-def generate_images(excel_path, sheet_name, output_dir, group_field=None, share_dir=None):
+def generate_images(excel_path, sheet_name, output_dir, naming_field=None, is_grouped=False, share_dir=None):
     """
     生成图片的核心逻辑
     
@@ -119,7 +119,8 @@ def generate_images(excel_path, sheet_name, output_dir, group_field=None, share_
         excel_path: Excel文件路径
         sheet_name: Sheet名称
         output_dir: 输出目录
-        group_field: 分组字段（可选）
+        naming_field: 命名字段（必选，用于命名文件或分组文件夹）
+        is_grouped: 是否分组（如果为True，则按naming_field分组，否则仅用其命名文件）
         share_dir: 共享文件目录（可选）
     """
     # 创建输出目录
@@ -131,12 +132,17 @@ def generate_images(excel_path, sheet_name, output_dir, group_field=None, share_
     df = df.fillna('')
     df = df.astype(str).replace(['NaT', 'nan', 'NaN'], '')
     
-    if group_field and group_field in df.columns:
-        # 分组模式
-        grouped = df.groupby(group_field)
+    if is_grouped and naming_field and naming_field in df.columns:
+        # 分组模式：按 naming_field 分组，创建文件夹
+        grouped = df.groupby(naming_field)
         
         for group_idx, (group_value, group) in enumerate(grouped):
             case_id = str(group_value)
+            # 过滤掉非法字符
+            case_id = "".join([c for c in case_id if c.isalnum() or c in (' ', '-', '_')]).strip()
+            if not case_id:
+                case_id = f"group_{group_idx}"
+
             case_dir = os.path.join(output_dir, case_id)
             
             if not os.path.exists(case_dir):
@@ -148,13 +154,31 @@ def generate_images(excel_path, sheet_name, output_dir, group_field=None, share_
             
             # 为分组中的每一行生成图片
             for group_row_index, (original_row_index, row) in enumerate(group.iterrows()):
-                image_name = f"{case_id}_{group_row_index}.png"
+                # 文件名：分组值_索引.png
+                image_name = f"{case_id}_{group_row_index + 1}.png"
                 image_path = os.path.join(case_dir, image_name)
                 create_image(row, image_path)
     else:
-        # 非分组模式，每行一张图片
+        # 非分组模式：所有图片生成在 output_dir 下
         for index, row in df.iterrows():
-            # 使用行索引作为文件名
-            image_name = f"row_{index + 1}.png"
+            if naming_field and naming_field in row:
+                name_val = str(row[naming_field])
+                # 过滤非法字符
+                name_val = "".join([c for c in name_val if c.isalnum() or c in (' ', '-', '_')]).strip()
+                if not name_val:
+                     name_val = f"row_{index + 1}"
+                image_name = f"{name_val}.png"
+                
+                # 处理重名：如果文件已存在，添加后缀
+                counter = 1
+                base_name = image_name
+                while os.path.exists(os.path.join(output_dir, image_name)):
+                    image_name = f"{os.path.splitext(base_name)[0]}_{counter}.png"
+                    counter += 1
+            else:
+                # 兜底：使用行索引
+                image_name = f"row_{index + 1}.png"
+            
             image_path = os.path.join(output_dir, image_name)
             create_image(row, image_path)
+

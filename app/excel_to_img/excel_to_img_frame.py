@@ -1,7 +1,7 @@
 import os
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, 
                              QPushButton, QComboBox, QFileDialog, QMessageBox, QFormLayout,
-                             QProgressDialog)
+                             QProgressDialog, QCheckBox)
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
 
 from app.base_frame import BaseFrame
@@ -36,15 +36,18 @@ class ExcelToImgFrame(BaseFrame):
         self.sheet_combo.currentIndexChanged.connect(self.on_sheet_selected)
         form_layout.addRow("选择 Sheet:", self.sheet_combo)
         
-        # 3. Group Field
-        group_layout = QHBoxLayout()
-        self.group_combo = QComboBox()
-        self.group_combo.addItem("不分组")
-        group_layout.addWidget(self.group_combo)
-        group_layout.addWidget(QLabel("(可选)"))
-        form_layout.addRow("分组字段:", group_layout)
+        # 3. Naming Field (Mandatory)
+        naming_layout = QHBoxLayout()
+        self.naming_combo = QComboBox()
+        naming_layout.addWidget(self.naming_combo)
+        form_layout.addRow("命名字段:", naming_layout)
+
+        # 4. Grouping Checkbox
+        self.group_checkbox = QCheckBox("是否分组")
+        self.group_checkbox.setChecked(False) # Default No
+        form_layout.addRow("", self.group_checkbox)
         
-        # 4. Shared Directory
+        # 5. Shared Directory
         share_layout = QHBoxLayout()
         self.share_dir_input = QLineEdit()
         self.share_dir_input.setPlaceholderText("请选择共享目录 (可选)")
@@ -105,9 +108,8 @@ class ExcelToImgFrame(BaseFrame):
             
         try:
             columns = excel_to_img.get_sheet_columns(excel_path, sheet_name)
-            self.group_combo.clear()
-            self.group_combo.addItem("不分组")
-            self.group_combo.addItems(columns)
+            self.naming_combo.clear()
+            self.naming_combo.addItems(columns)
         except Exception as e:
             QMessageBox.critical(self, "错误", f"读取 Sheet 列名失败:\n{str(e)}")
 
@@ -132,9 +134,13 @@ class ExcelToImgFrame(BaseFrame):
         if not output_dir:
             return
             
-        group_field = self.group_combo.currentText()
-        if group_field == "不分组":
-            group_field = None
+        naming_field = self.naming_combo.currentText()
+        if not naming_field:
+            QMessageBox.warning(self, "警告", "请选择命名字段")
+            return
+
+        is_grouped = self.group_checkbox.isChecked()
+        group_field = naming_field if is_grouped else None
             
         share_dir = self.share_dir_input.text()
         if not share_dir:
@@ -149,7 +155,7 @@ class ExcelToImgFrame(BaseFrame):
         self.progress.setCancelButton(None) # Disable cancel for now as backend might not support it
         self.progress.show()
         
-        self.thread = GenerateThread(excel_path, sheet_name, output_dir, group_field, share_dir)
+        self.thread = GenerateThread(excel_path, sheet_name, output_dir, naming_field, is_grouped, share_dir)
         self.thread.finished_signal.connect(self.on_finished)
         self.thread.error_signal.connect(self.on_error)
         self.thread.start()
@@ -170,12 +176,13 @@ class GenerateThread(QThread):
     finished_signal = pyqtSignal()
     error_signal = pyqtSignal(str)
     
-    def __init__(self, excel_path, sheet_name, output_dir, group_field, share_dir):
+    def __init__(self, excel_path, sheet_name, output_dir, naming_field, is_grouped, share_dir):
         super().__init__()
         self.excel_path = excel_path
         self.sheet_name = sheet_name
         self.output_dir = output_dir
-        self.group_field = group_field
+        self.naming_field = naming_field
+        self.is_grouped = is_grouped
         self.share_dir = share_dir
         
     def run(self):
@@ -184,7 +191,8 @@ class GenerateThread(QThread):
                 excel_path=self.excel_path,
                 sheet_name=self.sheet_name,
                 output_dir=self.output_dir,
-                group_field=self.group_field,
+                naming_field=self.naming_field,
+                is_grouped=self.is_grouped,
                 share_dir=self.share_dir
             )
             self.finished_signal.emit()
