@@ -9,10 +9,10 @@ a = Analysis(
     binaries=[],  # 可执行二进制文件，留空即可
     # 包含所有模块和资源
     datas=[
-        ('./app/*', 'app'),
-        ('./core/*', 'core'),
+        ('./app', 'app'),
+        ('./core', 'core'),
     ],
-    hiddenimports=[],  # 如果有隐藏的依赖，可以在这里添加
+    hiddenimports=['pandas', 'numpy'],  # 如果有隐藏的依赖，可以在这里添加
     hookspath=[],  # 自定义 hook 文件的路径，通常不用修改
     runtime_hooks=[],  # 运行时的 hook 脚本
     excludes=[]  # 如果有不需要的模块，可以在这里排除
