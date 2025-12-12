@@ -1,0 +1,61 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [windows-latest, macos-latest]
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+        cache: 'pip'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+
+    - name: Build with PyInstaller
+      run: |
+        pyinstaller main.spec
+
+    - name: Prepare Artifacts (Windows)
+      if: matrix.os == 'windows-latest'
+      run: |
+        cd dist
+        Rename-Item -Path "ImageUtils.exe" -NewName "ImageUtils-Windows.exe"
+
+    - name: Prepare Artifacts (macOS)
+      if: matrix.os == 'macos-latest'
+      run: |
+        cd dist
+        mv ImageUtils ImageUtils-macOS
+        chmod +x ImageUtils-macOS
+
+    - name: Upload Artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: ImageUtils-${{ matrix.os }}
+        path: dist/ImageUtils*
+
+    - name: Release
+      uses: softprops/action-gh-release@v2
+      if: startsWith(github.ref, 'refs/tags/')
+      with:
+        files: dist/ImageUtils*
